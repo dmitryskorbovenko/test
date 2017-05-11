@@ -33,28 +33,83 @@ task printVersion {
     println inferVersion()
 }
 
-static String inferVersion() {
-
-    def latestReleaseTag = "git describe --abbrev=0 --tags --match v* --first-parent".execute().text.trim()
-    def latestReleaseTagHash = "git rev-list -n 1 $latestReleaseTag".execute().text.trim()
-    def currentHash = "git rev-parse HEAD".execute().text.trim()
-    def currentBranch = "git rev-parse --abbrev-ref HEAD".execute().text.trim()
-
-    def isReleaseCommit = latestReleaseTagHash == currentHash
-    def isRcBranch = currentBranch.contains("RC")
-
-    def shouldIncrementMinor = !isReleaseCommit && !isRcBranch
-    def shouldAddSnapshot = !isReleaseCommit || isRcBranch
-
-    def version = latestReleaseTag.substring(1)
-    if (shouldIncrementMinor) {
-        version = version.replaceAll(/(\d+).(\d+).(\d+)/, { all, major, minor, patch ->
-            "$major.${Integer.parseInt(minor) + 1}.$patch" })
+task rc {
+    if (!isMasterBranch()) {
+        throw new GradleException('$name: you MUST create RC from master branch')
     }
 
-    if (shouldAddSnapshot) {
+    if ("git rev-parse --verify RC".execute().waitFor() == 0) {
+        throw new GradleException("$name: you already have local RC branch")
+    }
+
+    if (!project.hasProperty('rc.version')) {
+        throw new GradleException("$name: run: gradlew rc -Prc.version=1.0.0")
+    }
+
+    def version = project.property('rc.version')
+    if (!(version ==~ /\d+.\d+.\d+/)) {
+        throw new GradleException(name + ': rc.version parameter should comply regex /\\d+.\\d+.\\d+/ ')
+    }
+
+    exitOnFailure("git tag v$version-RC")
+    exitOnFailure("git checkout -b RC")
+    exitOnFailure("git push --tags")
+}
+
+
+static String exitOnFailure(String cmd) {
+    def process=new ProcessBuilder(['sh','-c', cmd]).redirectErrorStream(true).start()
+    def output = process.text
+    if (process.waitFor() != 0) {
+        throw new GradleException(output)
+    }
+
+    return output.trim()
+}
+
+task release {
+    if (!isRcBranch()) {
+        throw new GradleException('you MUST release from RC branch')
+    }
+
+}
+
+static String inferVersion() {
+
+    def latestTag = exitOnFailure("git describe --abbrev=0 --tags --match v* --first-parent")
+    def latestTagHash = exitOnFailure("git rev-list -n 1 $latestTag")
+
+    def isLatestTagRelease = latestTag ==~ /$\d+.\d+.\d+^/
+
+    def currentHash = exitOnFailure("git rev-parse HEAD")
+
+    def isOnReleaseCommit = isLatestTagRelease && latestTagHash == currentHash
+
+    def isRcBranch = isRcBranch()
+
+    def version = latestTag.substring(1)
+
+    if (!isRcBranch) {
+        version = version.replaceAll(/(\d+).(\d+).(\d+)(\.*)/, { all, major, minor, patch, suffix ->
+            "$major.${!isOnReleaseCommit ? Integer.parseInt(minor) + 1 : minor}.$patch"
+        })
+    }
+
+    if (!isOnReleaseCommit) {
         version += "-SNAPSHOT"
     }
 
     return version
+}
+
+static Boolean isRcBranch() {
+    return getCurrentBranchName().contains("RC")
+}
+
+static Boolean isMasterBranch() {
+    return getCurrentBranchName() == "master"
+}
+
+static String getCurrentBranchName() {
+    return exitOnFailure("git rev-parse --abbrev-ref HEAD")
 }

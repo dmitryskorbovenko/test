@@ -1,6 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 import org.ajoberstar.grgit.Grgit
 import org.ajoberstar.gradle.git.release.opinion.Strategies
+import org.ajoberstar.gradle.git.release.semver.RebuildVersionStrategy
 
 buildscript {
     repositories {
@@ -12,34 +13,6 @@ buildscript {
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
     }
-}
-
-apply plugin: 'org.ajoberstar.release-base'
-
-release {
-    grgit = Grgit.open(project.file('.'))
-
-    defaultVersionStrategy = Strategies.SNAPSHOT
-    /*
-     * Base plugin adds no strategies.
-     * Opinion plugin adds:
-     *   RebuildVersionStrategy.INSTANCE
-     *   Strategies.DEVELOPMENT
-     *   Strategies.PRE_RELEASE
-     *   Strategies.FINAL
-     */
-
-    // add your own choices from some pre-configured samples
-    versionStrategy RebuildVersionStrategy.INSTANCE
-//    versionStrategy Strategies.SNAPSHOT
-//    versionStrategy Strategies.PRE_RELEASE_ALPHA_BETA
-//    versionStrategy Strategies.FINAL
-//
-//    // the approach to creating tags can also be modified
-//    tagStrategy {
-//        prefixNameWithV = false // defaults to true
-//        generateMessage = { version -> "My new version $version.version" }
-//    }
 }
 
 allprojects {

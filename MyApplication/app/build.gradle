@@ -29,36 +29,58 @@ dependencies {
     testCompile 'junit:junit:4.12'
 }
 
-task printVersion {
+task printVersion() {
     println inferVersion()
 }
 
 task rc {
-    if (!isMasterBranch()) {
-        throw new GradleException('$name: you MUST create RC from master branch')
-    }
+    doLast {
+        if (!isMasterBranch()) {
+            throw new GradleException('$name: you MUST create RC from master branch')
+        }
 
-    if ("git rev-parse --verify RC".execute().waitFor() == 0) {
-        throw new GradleException("$name: you already have local RC branch")
-    }
+        if (isWcDirty()) {
+            throw new GradleException('you have local changes')
+        }
 
-    if (!project.hasProperty('rc.version')) {
-        throw new GradleException("$name: run: gradlew rc -Prc.version=1.0.0")
-    }
+        if ("git rev-parse --verify RC".execute().waitFor() == 0) {
+            throw new GradleException("$name: you already have local RC branch")
+        }
 
-    def version = project.property('rc.version')
-    if (!(version ==~ /\d+.\d+.\d+/)) {
-        throw new GradleException(name + ': rc.version parameter should comply regex /\\d+.\\d+.\\d+/ ')
-    }
+        if (!project.hasProperty('rc.version')) {
+            throw new GradleException("$name: run: gradlew rc -Prc.version=1.0.0")
+        }
 
-    exitOnFailure("git tag v$version-RC")
-    exitOnFailure("git checkout -b RC")
-    exitOnFailure("git push --tags")
+        def version = project.property('rc.version')
+        if (!(version ==~ /\d+.\d+.\d+/)) {
+            throw new GradleException(name + ': rc.version parameter should comply regex /\\d+.\\d+.\\d+/ ')
+        }
+
+        exitOnFailure("git tag v$version-RC")
+        exitOnFailure("git checkout -b RC")
+        exitOnFailure("git push origin RC -u")
+    }
 }
 
+task release {
+    doLast {
+        if (!isRcBranch()) {
+            throw new GradleException('you MUST release from RC branch')
+        }
 
-static String exitOnFailure(String cmd) {
-    def process=new ProcessBuilder(['sh','-c', cmd]).redirectErrorStream(true).start()
+        if (isWcDirty()) {
+            throw new GradleException('you have local changes')
+        }
+
+
+        def releaseVersion = getLatestTag().find(/\d+.\d+.\d+/)
+        exitOnFailure("git tag v$releaseVersion")
+        exitOnFailure("git push --tags")
+    }
+}
+
+private static String exitOnFailure(String cmd) {
+    def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
     def output = process.text
     if (process.waitFor() != 0) {
         throw new GradleException(output)
@@ -67,16 +89,9 @@ static String exitOnFailure(String cmd) {
     return output.trim()
 }
 
-task release {
-    if (!isRcBranch()) {
-        throw new GradleException('you MUST release from RC branch')
-    }
+private static String inferVersion() {
 
-}
-
-static String inferVersion() {
-
-    def latestTag = exitOnFailure("git describe --abbrev=0 --tags --match v* --first-parent")
+    def latestTag = getLatestTag()
     def latestTagHash = exitOnFailure("git rev-list -n 1 $latestTag")
 
     def isLatestTagRelease = latestTag ==~ /$\d+.\d+.\d+^/
@@ -102,14 +117,22 @@ static String inferVersion() {
     return version
 }
 
-static Boolean isRcBranch() {
+private static String getLatestTag() {
+    exitOnFailure("git describe --abbrev=0 --tags --match v* --first-parent")
+}
+
+private static Boolean isRcBranch() {
     return getCurrentBranchName().contains("RC")
 }
 
-static Boolean isMasterBranch() {
+private static Boolean isMasterBranch() {
     return getCurrentBranchName() == "master"
 }
 
-static String getCurrentBranchName() {
+private static String getCurrentBranchName() {
     return exitOnFailure("git rev-parse --abbrev-ref HEAD")
+}
+
+private static boolean isWcDirty() {
+    return "git diff-index --quiet HEAD --".execute().waitFor() != 0
 }

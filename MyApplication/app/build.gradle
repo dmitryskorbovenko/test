@@ -1,41 +1,4 @@
-import org.ajoberstar.gradle.git.release.opinion.Strategies
-import org.ajoberstar.gradle.git.release.semver.RebuildVersionStrategy
-import org.ajoberstar.grgit.Grgit
-
 apply plugin: 'com.android.application'
-apply plugin: 'org.ajoberstar.release-base'
-//apply plugin: 'com.android.application'
-//plugins {
-//    id 'org.ajoberstar.grgit' version '1.7.1'
-//    id 'org.ajoberstar.release-base' version '1.7.1'
-//}
-
-
-release {
-    grgit = Grgit.open(parent.file('..'))
-
-    defaultVersionStrategy = Strategies.SNAPSHOT
-    /*
-     * Base plugin adds no strategies.
-     * Opinion plugin adds:
-     *   RebuildVersionStrategy.INSTANCE
-     *   Strategies.DEVELOPMENT
-     *   Strategies.PRE_RELEASE
-     *   Strategies.FINAL
-     */
-
-    // add your own choices from some pre-configured samples
-    versionStrategy RebuildVersionStrategy.INSTANCE
-    versionStrategy Strategies.SNAPSHOT
-    versionStrategy Strategies.PRE_RELEASE_ALPHA_BETA
-    versionStrategy Strategies.FINAL
-
-    // the approach to creating tags can also be modified
-    tagStrategy {
-        prefixNameWithV = false // defaults to true
-        generateMessage = { version -> "My new version $version.version" }
-    }
-}
 
 android {
     compileSdkVersion 25
@@ -45,7 +8,7 @@ android {
         minSdkVersion 15
         targetSdkVersion 25
         versionCode 1
-        versionName "1.0"
+        versionName inferVersion()
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -67,5 +30,31 @@ dependencies {
 }
 
 task printVersion {
-    println project.version.toString()
+    println inferVersion()
+}
+
+static String inferVersion() {
+
+    def latestReleaseTag = "git describe --abbrev=0 --tags --match v* --first-parent".execute().text.trim()
+    def latestReleaseTagHash = "git rev-list -n 1 $latestReleaseTag".execute().text.trim()
+    def currentHash = "git rev-parse HEAD".execute().text.trim()
+    def currentBranch = "git rev-parse --abbrev-ref HEAD".execute().text.trim()
+
+    def isReleaseCommit = latestReleaseTagHash == currentHash
+    def isRcBranch = currentBranch.contains("RC")
+
+    def shouldIncrementMinor = !isReleaseCommit && !isRcBranch
+    def shouldAddSnapshot = !isReleaseCommit || isRcBranch
+
+    def version = latestReleaseTag.substring(1)
+    if (shouldIncrementMinor) {
+        version = version.replaceAll(/(\d+).(\d+).(\d+)/, { all, major, minor, patch ->
+            "$major.${Integer.parseInt(minor) + 1}.$patch" })
+    }
+
+    if (shouldAddSnapshot) {
+        version += "-SNAPSHOT"
+    }
+
+    return version
 }

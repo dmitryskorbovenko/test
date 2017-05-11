@@ -54,7 +54,7 @@ task rc {
         }
 
         def version = project.property('rc.version')
-        if (!(version ==~ /\d+.\d+.\d+/)) {
+        if (!(version ==~ /\d+\.\d+\.\d+/)) {
             throw new GradleException(name + ': rc.version parameter should comply regex /\\d+.\\d+.\\d+/ ')
         }
 
@@ -75,7 +75,7 @@ task release {
         }
 
 
-        def releaseVersion = getLatestTag().find(/\d+.\d+.\d+/)
+        def releaseVersion = getLatestTag().find(/\d+\.\d+\.\d+/)
         exitOnFailure("git tag v$releaseVersion")
         exitOnFailure("git push --tags")
     }
@@ -94,9 +94,10 @@ private static String exitOnFailure(String cmd) {
 private static String inferVersion() {
 
     def latestTag = getLatestTag()
+
     def latestTagHash = exitOnFailure("git rev-list -n 1 $latestTag")
 
-    def isLatestTagRelease = latestTag ==~ /$\d+.\d+.\d+^/
+    def isLatestTagRelease = latestTag ==~ /$\d+\.\d+\.\d+^/
 
     def currentHash = exitOnFailure("git rev-parse HEAD")
 
@@ -104,10 +105,9 @@ private static String inferVersion() {
 
     def isRcBranch = isRcBranch()
 
-    def version = latestTag.substring(1)
-
+    def version = latestTag
     if (!isRcBranch) {
-        version = version.replaceAll(/(\d+).(\d+).(\d+)(\.*)/, { all, major, minor, patch, suffix ->
+        version = version.replaceAll(/v(\d+)\.(\d+)\.(\d+)(.*)/, { all, major, minor, patch, suffix ->
             "$major.${!isOnReleaseCommit ? Integer.parseInt(minor) + 1 : minor}.$patch"
         })
     }

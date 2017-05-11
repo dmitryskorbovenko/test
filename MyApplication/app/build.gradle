@@ -45,7 +45,7 @@ task rc {
             throw new GradleException('you have local changes')
         }
 
-        if ("git rev-parse --verify RC".execute().waitFor() == 0) {
+        if (isRcBranchExist()) {
             throw new GradleException("$name: you already have local RC branch")
         }
 
@@ -125,6 +125,10 @@ private static String getLatestTag() {
 
 private static Boolean isRcBranch() {
     return getCurrentBranchName().contains("RC")
+}
+
+private static Boolean isRcBranchExist() {
+    return "git rev-parse --verify RC".execute().waitFor() == 0
 }
 
 private static Boolean isMasterBranch() {

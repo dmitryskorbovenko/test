@@ -97,12 +97,12 @@ private static String inferVersion() {
 
     def latestTagHash = exitOnFailure("git rev-list -n 1 $latestTag")
 
-    def isLatestTagRelease = latestTag ==~ /$\d+\.\d+\.\d+^/
+    def isLatestTagRelease = latestTag ==~ /v\d+\.\d+\.\d+/
 
     def currentHash = exitOnFailure("git rev-parse HEAD")
 
     def isOnReleaseCommit = isLatestTagRelease && latestTagHash == currentHash
-
+    
     def isRcBranch = isRcBranch()
 
     def version = latestTag

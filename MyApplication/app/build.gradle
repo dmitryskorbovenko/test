@@ -58,9 +58,11 @@ task rc {
             throw new GradleException(name + ': rc.version parameter should comply regex /\\d+.\\d+.\\d+/ ')
         }
 
-        exitOnFailure("git tag v$version-RC")
-        exitOnFailure("git checkout -b RC")
-        exitOnFailure("git push origin RC -u")
+        Transaction.run {
+            exec("git tag v$version-RC", "git tag -d v$version-RC")
+            exec("git checkout -b RC", "git branch -d RC")
+            exec("git push origin RC -u", "git checkout master")
+        }
     }
 }
 
@@ -74,21 +76,13 @@ task release {
             throw new GradleException('you have local changes')
         }
 
-
         def releaseVersion = getLatestTag().find(/\d+\.\d+\.\d+/)
-        exitOnFailure("git tag v$releaseVersion")
-        exitOnFailure("git push --tags")
-    }
-}
 
-private static String exitOnFailure(String cmd) {
-    def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
-    def output = process.text
-    if (process.waitFor() != 0) {
-        throw new GradleException(output)
+        Transaction.run {
+            exec("git tag v$releaseVersion", "git tag -d v$releaseVersion")
+            exec("git push --tags")
+        }
     }
-
-    return output.trim()
 }
 
 private static String inferVersion() {
@@ -141,4 +135,46 @@ private static String getCurrentBranchName() {
 
 private static boolean isWcDirty() {
     return "git diff-index --quiet HEAD --".execute().waitFor() != 0
+}
+
+private static String exitOnFailure(String cmd) {
+    def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
+    def output = process.text
+    if (process.waitFor() != 0) {
+        throw new GradleException(output)
+    }
+
+    return output.trim()
+}
+
+class Transaction {
+
+    private List<String> revertOperations = new ArrayList<>()
+
+    String exec(String cmd, String revertCmd) {
+        if (revertCmd != null) {
+            revertOperations.add(revertCmd)
+        }
+
+        return exitOnFailure(cmd)
+    }
+
+    static void run(Closure clojure) {
+        def transaction = new Transaction()
+        clojure.resolveStrategy = Closure.DELEGATE_ONLY
+        clojure.setDelegate(transaction)
+        try {
+            clojure.run()
+        } catch (GradleException ex) {
+            transaction.revertOperations.forEach {
+                println "revert: $it"
+                it.execute().waitFor()
+            }
+            throw ex
+        }
+    }
+
+    class TransactionException extends Exception {
+
+    }
 }

@@ -68,7 +68,7 @@ task rc {
         runTransaction({
             execOrThrow("git tag v$version-RC")
             execOrThrow("git checkout -b $rcBranchName")
-            execOrThrow("git push origin $rcBranchName -u")
+            execOrThrow("gitt push origin $rcBranchName -u")
         }, {
             exec("git checkout master")
             exec("git tag -d v$version-RC")

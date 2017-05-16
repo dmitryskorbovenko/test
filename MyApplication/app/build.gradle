@@ -103,6 +103,14 @@ task release {
                 println yellow("Please merge $currentBranchName to master manualy")
             } else {
                 exec("git merge $currentBranchName")
+
+                ant.input(message: 'You are going to delete branch $currentBranchName. Delete it?', validargs: 'y,n', addproperty: 'doDeleteBranch')
+
+                if(ant.doDeleteBranch == 'y') {
+                    exec("git branch -d $currentBranchName")
+                    exec("git push origin --delete $currentBranchName")
+                }
+
                 exec("git push origin")
             }
 

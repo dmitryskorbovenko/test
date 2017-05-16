@@ -38,7 +38,7 @@ task printVersion {
 task rc {
     doLast {
         if (!isMasterBranch()) {
-            throw new GradleException('$name: you MUST create RC from master branch')
+            throw new GradleException('you MUST create RC from master branch')
         }
 
         if (isWcDirty()) {
@@ -46,11 +46,11 @@ task rc {
         }
 
         if (isRcBranchExist()) {
-            throw new GradleException("$name: you already have local RC branch")
+            throw new GradleException("you already have local RC branch")
         }
 
         if (!project.hasProperty('rc.version')) {
-            throw new GradleException("$name: run: gradlew rc -Prc.version=1.0.0")
+            throw new GradleException("run with -Prc.version=1.0.0")
         }
 
         def version = project.property('rc.version')
@@ -58,11 +58,23 @@ task rc {
             throw new GradleException(name + ': rc.version parameter should comply regex /\\d+.\\d+.\\d+/ ')
         }
 
-        Transaction.run {
-            exec("git tag v$version-RC", "git tag -d v$version-RC")
-            exec("git checkout -b RC", "git branch -d RC")
-            exec("git push origin RC -u", "git checkout master")
+        if (!project.hasProperty('rc.issue')) {
+            throw new GradleException("run with -Prc.issue=TP-1234")
         }
+
+        def issue = project.property('rc.issue')
+        def rcBranchName = "RC-$issue"
+
+        runTransaction({
+            execOrThrow("git tag v$version-RC")
+            execOrThrow("git checkout -b $rcBranchName")
+            execOrThrow("git push origin $rcBranchName -u")
+        }, {
+            exec("git checkout master")
+            exec("git tag -d v$version-RC")
+            exec("git branch -d $rcBranchName")
+            exec("git push origin --delete $rcBranchName")
+        })
     }
 }
 
@@ -76,12 +88,27 @@ task release {
             throw new GradleException('you have local changes')
         }
 
+        def currentBranchName = getCurrentBranchName()
         def releaseVersion = getLatestTag().find(/\d+\.\d+\.\d+/)
 
-        Transaction.run {
-            exec("git tag v$releaseVersion", "git tag -d v$releaseVersion")
-            exec("git push --tags")
-        }
+        runTransaction({
+            execOrThrow("git tag v$releaseVersion")
+            execOrThrow("git push origin --tags")
+
+            exec("git checkout master")
+            def mergeResult = exec("git merge --no-commit  --no-ff $currentBranchName")
+            exec("git merge --abort")
+
+            if (mergeResult != 0) {
+                println "Please merge $currentBranchName to master manualy"
+            } else {
+                exec("git merge $currentBranchName")
+                exec("git push origin")
+            }
+
+        }, {
+            exec("git tag -d v$releaseVersion")
+        })
     }
 }
 
@@ -89,11 +116,11 @@ private static String inferVersion() {
 
     def latestTag = getLatestTag()
 
-    def latestTagHash = exitOnFailure("git rev-list -n 1 $latestTag")
+    def latestTagHash = execOrThrow("git rev-list -n 1 $latestTag")
 
     def isLatestTagRelease = latestTag ==~ /v\d+\.\d+\.\d+/
 
-    def currentHash = exitOnFailure("git rev-parse HEAD")
+    def currentHash = execOrThrow("git rev-parse HEAD")
 
     def isOnReleaseCommit = isLatestTagRelease && latestTagHash == currentHash
 
@@ -114,7 +141,7 @@ private static String inferVersion() {
 }
 
 private static String getLatestTag() {
-    exitOnFailure("git describe --abbrev=0 --tags --match v* --first-parent")
+    execOrThrow("git describe --abbrev=0 --tags --match v* --first-parent")
 }
 
 private static Boolean isRcBranch() {
@@ -130,14 +157,15 @@ private static Boolean isMasterBranch() {
 }
 
 private static String getCurrentBranchName() {
-    return exitOnFailure("git rev-parse --abbrev-ref HEAD")
+    return execOrThrow("git rev-parse --abbrev-ref HEAD")
 }
 
 private static boolean isWcDirty() {
     return "git diff-index --quiet HEAD --".execute().waitFor() != 0
 }
 
-private static String exitOnFailure(String cmd) {
+private static String execOrThrow(String cmd) {
+    println "execOrThrow $cmd"
     def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
     def output = process.text
     if (process.waitFor() != 0) {
@@ -147,34 +175,16 @@ private static String exitOnFailure(String cmd) {
     return output.trim()
 }
 
-class Transaction {
+private static int exec(String cmd) {
+    println "exec $cmd"
+    return cmd.execute().waitFor()
+}
 
-    private List<String> revertOperations = new ArrayList<>()
-
-    String exec(String cmd, String revertCmd) {
-        if (revertCmd != null) {
-            revertOperations.add(revertCmd)
-        }
-
-        return exitOnFailure(cmd)
-    }
-
-    static void run(Closure clojure) {
-        def transaction = new Transaction()
-        clojure.resolveStrategy = Closure.DELEGATE_ONLY
-        clojure.setDelegate(transaction)
-        try {
-            clojure.run()
-        } catch (GradleException ex) {
-            transaction.revertOperations.forEach {
-                println "revert: $it"
-                it.execute().waitFor()
-            }
-            throw ex
-        }
-    }
-
-    class TransactionException extends Exception {
-
+private static String runTransaction(Closure cmds, Closure revertCmds) {
+    try {
+        cmds.call()
+    } catch (Exception ex) {
+        revertCmds.call()
+        throw ex
     }
 }

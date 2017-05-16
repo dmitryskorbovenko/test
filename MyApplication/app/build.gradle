@@ -88,7 +88,7 @@ task release {
             throw new GradleException(red('you have local changes'))
         }
 
-        def currentBranchName = getCurrentBranchName()
+        def rcBranchName = getCurrentBranchName()
         def releaseVersion = getLatestTag().find(/\d+\.\d+\.\d+/)
 
         runTransaction({
@@ -96,19 +96,19 @@ task release {
             execOrThrow("git push origin --tags")
 
             exec("git checkout master")
-            def mergeResult = exec("git merge --no-commit  --no-ff $currentBranchName")
+            def mergeResult = exec("git merge --no-commit  --no-ff $rcBranchName")
             exec("git merge --abort")
 
             if (mergeResult != 0) {
-                println yellow("Please merge $currentBranchName to master manualy")
+                println yellow("Please merge $rcBranchName to master manualy")
             } else {
-                exec("git merge $currentBranchName")
+                exec("git merge $rcBranchName")
 
-                ant.input(message: "You are going to delete branch $currentBranchName. Delete it?", validargs: 'y,n', addproperty: 'doDeleteBranch')
+                ant.input(message: "You are going to delete branch $rcBranchName. Delete it?", validargs: 'y,n', addproperty: 'doDeleteBranch')
 
                 if(ant.doDeleteBranch == 'y') {
-                    exec("git branch -d $currentBranchName")
-                    exec("git push origin --delete $currentBranchName")
+                    exec("git push origin --delete $rcBranchName")
+                    exec("git branch -d $rcBranchName")
                 }
 
                 exec("git push origin")
@@ -184,8 +184,9 @@ private static String execOrThrow(String cmd) {
 }
 
 private static int exec(String cmd) {
-    println "exec $cmd"
-    return cmd.execute().waitFor()
+    def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
+    println "exec $cmd: ${process.text}"
+    return process.waitFor()
 }
 
 private static String runTransaction(Closure cmds, Closure revertCmds) {

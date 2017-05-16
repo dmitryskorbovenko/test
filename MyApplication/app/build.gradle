@@ -45,10 +45,6 @@ task rc {
             throw new GradleException(red('you have local changes'))
         }
 
-        if (isRcBranchExist()) {
-            throw new GradleException(red("you already have local RC branch"))
-        }
-
         if (!project.hasProperty('rc.version')) {
             throw new GradleException(red("run with -Prc.version=1.0.0"))
         }
@@ -64,6 +60,10 @@ task rc {
 
         def issue = project.property('rc.issue')
         def rcBranchName = "RC-$issue"
+
+        if (isBranchExist(rcBranchName)) {
+            throw new GradleException(red("you already have local RC branch"))
+        }
 
         runTransaction({
             execOrThrow("git tag v$version-RC")
@@ -156,8 +156,8 @@ private static Boolean isRcBranch() {
     return getCurrentBranchName().contains("RC")
 }
 
-private static Boolean isRcBranchExist() {
-    return exec("git rev-parse --verify RC") == 0
+private static Boolean isBranchExist(String branchName) {
+    return exec("git rev-parse --verify $branchName") == 0
 }
 
 private static Boolean isMasterBranch() {

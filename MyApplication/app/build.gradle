@@ -104,7 +104,7 @@ task release {
             } else {
                 exec("git merge $currentBranchName")
 
-                ant.input(message: 'You are going to delete branch $currentBranchName. Delete it?', validargs: 'y,n', addproperty: 'doDeleteBranch')
+                ant.input(message: "You are going to delete branch $currentBranchName. Delete it?", validargs: 'y,n', addproperty: 'doDeleteBranch')
 
                 if(ant.doDeleteBranch == 'y') {
                     exec("git branch -d $currentBranchName")

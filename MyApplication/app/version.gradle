@@ -102,6 +102,9 @@ task hotfix {
         }
 
         def versionToFix = project.property('versionToFix')
+
+        println "ha $versionToFix"
+
         if (!(versionToFix ==~ /\d+\.\d+\.\d+/) || versionToFix != "latest") {
             throw new GradleException(red('versionToFix parameter should comply regex /\\d+.\\d+.\\d+/ or "latest"'))
         }

@@ -14,30 +14,30 @@ task rc {
             throw new GradleException(red('you have local changes'))
         }
 
-        if (!project.hasProperty('rc.version')) {
-            throw new GradleException(red("run with -Prc.version=1.0.0"))
+        if (!project.hasProperty('version')) {
+            throw new GradleException(red("run with -Pversion=1.0.0"))
         }
 
-        def version = project.property('rc.version')
+        def version = project.property('version')
         if (!(version ==~ /\d+\.\d+\.\d+/)) {
             throw new GradleException(red('rc.version parameter should comply regex /\\d+.\\d+.\\d+/ '))
         }
 
-        if (!project.hasProperty('rc.issue')) {
-            throw new GradleException(red("run with -Prc.issue=TP-1234"))
+        if (!project.hasProperty('issue')) {
+            throw new GradleException(red("run with -Pissue=TP-1234"))
         }
 
-        def issue = project.property('rc.issue')
+        def issue = project.property('issue')
         def rcBranchName = "RC-$issue"
 
         runTransaction({
-            execOrThrow("git tag v$version-RC")
+            execOrThrow("git tag rc.v$version")
             execOrThrow("git push origin --tags")
             execOrThrow("git checkout -b $rcBranchName")
             execOrThrow("git push origin $rcBranchName -u")
         }, {
             execAndWaitFor("git checkout master")
-            execAndWaitFor("git tag -d v$version-RC")
+            execAndWaitFor("git tag -d rc.v$version")
             execAndWaitFor("git branch -d $rcBranchName")
             execAndWaitFor("git push origin --delete v$version-RC --delete $rcBranchName")
         })

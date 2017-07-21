@@ -109,6 +109,7 @@ task hotfix {
             throw new GradleException(red('versionToFix parameter should comply regex /\\d+.\\d+.\\d+/ or "latest"'))
         }
 
+        def versionToFixTag
         if (versionToFix == "latest") {
             versionToFixTag = getLatestReleaseTag()
         } else {

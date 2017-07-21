@@ -98,15 +98,20 @@ task hotfix {
         }
 
         if (!project.hasProperty('versionToFix')) {
-            throw new GradleException(red("run with -PversionToFix=1.0.0"))
+            throw new GradleException(red("run with -PversionToFix=[1.0.0 | latest]"))
         }
 
         def versionToFix = project.property('versionToFix')
-        if (!(versionToFix ==~ /\d+\.\d+\.\d+/)) {
-            throw new GradleException(red('versionToFix parameter should comply regex /\\d+.\\d+.\\d+/ '))
+        if (!(versionToFix ==~ /\d+\.\d+\.\d+/) || versionToFix != "latest") {
+            throw new GradleException(red('versionToFix parameter should comply regex /\\d+.\\d+.\\d+/ or "latest"'))
         }
 
-        def versionToFixTag = "v$versionToFix"
+        if (versionToFix == "latest") {
+            versionToFixTag = getLatestReleaseTag()
+        } else {
+            versionToFixTag = "v$versionToFix"
+        }
+
         if (execAndWaitFor("git rev-parse $versionToFixTag") != 0) {
             throw new GradleException(red("tag $versionToFixTag doesn't exist"))
         }

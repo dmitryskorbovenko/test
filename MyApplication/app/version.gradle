@@ -103,8 +103,6 @@ task hotfix {
 
         def versionToFix = project.property('versionToFix')
 
-        println green("hotfix for $versionToFix")
-
         if (!(versionToFix ==~ /\d+\.\d+\.\d+/) && versionToFix != "latest") {
             throw new GradleException(red('versionToFix parameter should comply regex /\\d+.\\d+.\\d+/ or "latest"'))
         }
@@ -116,6 +114,8 @@ task hotfix {
         } else {
             versionToFixTag = "v$versionToFix"
         }
+
+        println green("hotfix for $versionToFix")
 
         if (execAndWaitFor("git rev-parse $versionToFixTag") != 0) {
             throw new GradleException(red("tag $versionToFixTag doesn't exist"))

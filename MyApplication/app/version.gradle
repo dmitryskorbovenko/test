@@ -1,0 +1,250 @@
+task printVersion {
+    doLast {
+        println inferVersion(true)
+    }
+}
+
+task rc {
+    doLast {
+        if (!isMasterBranch()) {
+            throw new GradleException(red('you MUST create RC branch from master one'))
+        }
+
+        if (isWcDirty()) {
+            throw new GradleException(red('you have local changes'))
+        }
+
+        if (!project.hasProperty('rc.version')) {
+            throw new GradleException(red("run with -Prc.version=1.0.0"))
+        }
+
+        def version = project.property('rc.version')
+        if (!(version ==~ /\d+\.\d+\.\d+/)) {
+            throw new GradleException(red('rc.version parameter should comply regex /\\d+.\\d+.\\d+/ '))
+        }
+
+        if (!project.hasProperty('rc.issue')) {
+            throw new GradleException(red("run with -Prc.issue=TP-1234"))
+        }
+
+        def issue = project.property('rc.issue')
+        def rcBranchName = "RC-$issue"
+
+        runTransaction({
+            execOrThrow("git tag v$version-RC")
+            execOrThrow("git push origin --tags")
+            execOrThrow("git checkout -b $rcBranchName")
+            execOrThrow("git push origin $rcBranchName -u")
+        }, {
+            execAndWaitFor("git checkout master")
+            execAndWaitFor("git tag -d v$version-RC")
+            execAndWaitFor("git branch -d $rcBranchName")
+            execAndWaitFor("git push origin --delete v$version-RC --delete $rcBranchName")
+        })
+    }
+}
+
+task release {
+    doLast {
+        if (!isRcBranch()) {
+            throw new GradleException(red('you MUST release from RC branch'))
+        }
+
+        if (isWcDirty()) {
+            throw new GradleException(red('you have local changes'))
+        }
+
+        def rcBranchName = getCurrentBranchName()
+        def releaseVersion = getLatestRcTag().find(/\d+\.\d+\.\d+/)
+
+        runTransaction({
+            execOrThrow("git tag v$releaseVersion")
+            execOrThrow("git push origin --tags")
+
+            execAndWaitFor("git checkout master")
+            def mergeResult = execAndWaitFor("git merge --no-commit  --no-ff $rcBranchName")
+            execAndWaitFor("git merge --abort")
+
+            if (mergeResult != 0) {
+                println red("Please merge $rcBranchName to master manualy")
+            } else {
+                execAndWaitFor("git merge $rcBranchName")
+
+                ant.input(message: "You are going to delete branch $rcBranchName. Delete it?", validargs: 'y,n', addproperty: 'doDeleteBranch')
+
+                if (ant.doDeleteBranch == 'y') {
+                    execAndWaitFor("git push origin --delete $rcBranchName")
+                    execAndWaitFor("git branch -d $rcBranchName")
+                }
+
+                execAndWaitFor("git push origin")
+            }
+
+        }, {
+            execAndWaitFor("git tag -d v$releaseVersion")
+            execAndWaitFor("git push origin --delete v$releaseVersion")
+        })
+    }
+}
+
+task hotfix {
+    doLast {
+        if (!isMasterBranch()) {
+            throw new GradleException(red('you MUST create RC branch from master one'))
+        }
+
+        if (isWcDirty()) {
+            throw new GradleException(red('you have local changes'))
+        }
+
+        if (!project.hasProperty('versionToFix')) {
+            throw new GradleException(red("run with -PversionToFix=1.0.0"))
+        }
+
+        def versionToFix = project.property('versionToFix')
+        if (!(versionToFix ==~ /\d+\.\d+\.\d+/)) {
+            throw new GradleException(red('versionToFix parameter should comply regex /\\d+.\\d+.\\d+/ '))
+        }
+
+        def versionToFixTag = "v$versionToFix"
+        if (execAndWaitFor("git rev-parse $versionToFixTag") != 0) {
+            throw new GradleException(red("tag $versionToFixTag doesn't exist"))
+        }
+
+        if (!project.hasProperty('issue')) {
+            throw new GradleException(red("run with -Pissue=TP-1234"))
+        }
+
+        def hotFixVersion = versionToFix.replaceAll(/(\d+)\.(\d+)\.(\d+)(.*)/, { all, major, minor, patch, suffix ->
+            "$major.$minor.${Integer.parseInt(patch) + 1}"
+        })
+
+        def issue = project.property('issue')
+        def rcBranchName = "RC-$issue"
+
+        runTransaction({
+            execOrThrow("git checkout $versionToFixTag")
+            execOrThrow("git tag rc.v$hotFixVersion")
+            execOrThrow("git push origin --tags")
+            execOrThrow("git checkout -b $rcBranchName")
+            execOrThrow("git push origin $rcBranchName -u")
+        }, {
+            execAndWaitFor("git checkout master")
+            execAndWaitFor("git tag -d rc.v$hotFixVersion")
+            execAndWaitFor("git branch -d $rcBranchName")
+            execAndWaitFor("git push origin --delete rc.v$hotFixVersion --delete $rcBranchName")
+        })
+    }
+}
+
+private static def inferVersion(debug = false) {
+
+    def latestTag = getLatestTag()
+    if (debug) {
+        println "latestTag $latestTag"
+    }
+
+    def latestTagHash = execOrThrow("git rev-list -n 1 $latestTag")
+
+    def isLatestTagRelease = latestTag ==~ /v\d+\.\d+\.\d+/
+    if (debug) {
+        println "isLatestTagRelease $isLatestTagRelease"
+    }
+
+    def currentHash = execOrThrow("git rev-parse HEAD")
+
+    def isOnReleaseCommit = isLatestTagRelease && latestTagHash == currentHash
+    if (debug) {
+        println "isOnReleaseCommit $isOnReleaseCommit"
+    }
+
+    def isRcBranch = isRcBranch()
+    if (debug) {
+        println "isRcBranch $isRcBranch"
+    }
+
+    def version = latestTag.substring(1)
+    if (!isRcBranch) {
+        version = version.replaceAll(/(\d+)\.(\d+)\.(\d+)(.*)/, { all, major, minor, patch, suffix ->
+            "$major.${!isOnReleaseCommit ? Integer.parseInt(minor) + 1 : minor}.${!isOnReleaseCommit ? 0 : patch}"
+        })
+    }
+
+    if (!isOnReleaseCommit) {
+        version += "-SNAPSHOT"
+    }
+
+    return version
+}
+
+private static String getLatestTag() {
+    execOrThrow("git describe --abbrev=0 --tags --match v*")
+}
+
+private static String getLatestRcTag() {
+    execOrThrow("git describe --abbrev=0 --tags --match rc.v*")
+}
+
+private static Boolean isRcBranch() {
+    return getCurrentBranchName().contains("RC")
+}
+
+private static Boolean isMasterBranch() {
+    return getCurrentBranchName() == "master"
+}
+
+private static String getCurrentBranchName() {
+    return execOrThrow("git rev-parse --abbrev-ref HEAD")
+}
+
+private static boolean isWcDirty() {
+    return execAndWaitFor("git diff-index --quiet HEAD --") != 0
+}
+
+private static String execOrThrow(String cmd) {
+    def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
+    def output = process.text
+    if (process.waitFor() != 0) {
+        throw new GradleException(output)
+    }
+
+    return output.trim()
+}
+
+private static int execAndWaitFor(String cmd) {
+    def process = new ProcessBuilder(['sh', '-c', cmd]).redirectErrorStream(true).start()
+    return process.waitFor()
+}
+
+private static String runTransaction(Closure cmds, Closure revertCmds) {
+    try {
+        cmds.call()
+    } catch (Exception ex) {
+        revertCmds.call()
+        throw ex
+    }
+}
+
+ext {
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[1;33m'
+    RED = '\033[0;31m'
+    ORANGE = '\033[0;33m'
+    NC = '\033[0m'
+}
+
+private String red(String str) {
+    return "$RED$str$NC"
+}
+
+private String yellow(String str) {
+    return "$YELLOW$str$NC"
+}
+
+private String green(String str) {
+    return "$GREEN$str$NC"
+}
+
+gradle.allprojects {
+    ext.inferVersion = inferVersion()
+} 

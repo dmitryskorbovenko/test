@@ -116,6 +116,8 @@ task hotfix {
             versionToFixTag = "v$versionToFix"
         }
 
+        println "ha $versionToFixTag"
+
         if (execAndWaitFor("git rev-parse $versionToFixTag") != 0) {
             throw new GradleException(red("tag $versionToFixTag doesn't exist"))
         }

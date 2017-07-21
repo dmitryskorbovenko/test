@@ -112,6 +112,7 @@ task hotfix {
         def versionToFixTag
         if (versionToFix == "latest") {
             versionToFixTag = getLatestReleaseTag()
+            versionToFix = versionToFixTag.substring(1)
         } else {
             versionToFixTag = "v$versionToFix"
         }

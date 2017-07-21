@@ -170,7 +170,7 @@ private static def inferVersion(debug = false) {
         })
     }
 
-    if (!isOnReleaseCommit) {
+    if (!isOnReleaseCommit && !isRcBranch) {
         version += "-SNAPSHOT"
     }
 

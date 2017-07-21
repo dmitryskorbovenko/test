@@ -14,13 +14,13 @@ task rc {
             throw new GradleException(red('you have local changes'))
         }
 
-        if (!project.hasProperty('version')) {
-            throw new GradleException(red("run with -Pversion=1.0.0"))
+        if (!project.hasProperty('rcVersion')) {
+            throw new GradleException(red("run with -PrcVersion=1.0.0"))
         }
 
-        def version = project.property('version')
+        def version = project.property('rcVersion')
         if (!(version ==~ /\d+\.\d+\.\d+/)) {
-            throw new GradleException(red('rc.version parameter should comply regex /\\d+.\\d+.\\d+/ '))
+            throw new GradleException(red('rcVersion parameter should comply regex /\\d+.\\d+.\\d+/ '))
         }
 
         if (!project.hasProperty('issue')) {

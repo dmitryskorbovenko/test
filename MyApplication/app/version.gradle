@@ -139,7 +139,12 @@ task hotfix {
 
 private static def inferVersion(debug = false) {
 
-    def latestTag = getLatestTag()
+    def isRcBranch = isRcBranch()
+    if (debug) {
+        println "isRcBranch $isRcBranch"
+    }
+
+    def latestTag = isRcBranch ? getLatestRcTag() : getLatestReleaseTag()
     if (debug) {
         println "latestTag $latestTag"
     }
@@ -158,11 +163,6 @@ private static def inferVersion(debug = false) {
         println "isOnReleaseCommit $isOnReleaseCommit"
     }
 
-    def isRcBranch = isRcBranch()
-    if (debug) {
-        println "isRcBranch $isRcBranch"
-    }
-
     def version = latestTag.substring(1)
     if (!isRcBranch) {
         version = version.replaceAll(/(\d+)\.(\d+)\.(\d+)(.*)/, { all, major, minor, patch, suffix ->
@@ -177,7 +177,7 @@ private static def inferVersion(debug = false) {
     return version
 }
 
-private static String getLatestTag() {
+private static String getLatestReleaseTag() {
     execOrThrow("git describe --abbrev=0 --tags --match v*")
 }
 
